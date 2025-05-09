@@ -30,15 +30,14 @@ private:
   int gripper_state_ = 0;
 
   rclcpp::TimerBase::SharedPtr timer_;
-  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_kl_js_, pub_kr_js_, pub_i12_js_, pub_sim_js_;
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_i12_js_, pub_sim_js_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pub_kl_tcp_, pub_kr_tcp_, pub_i12_pose_, pub_sim_crs_pose_, pub_sim_tgt_pose_, pub_sim_tcp_, pub_sim_com_, pub_sim_ring_;
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr pub_sim_crs_vel_, pub_sim_tgt_vel_;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr pub_kpos_js_;
   std::vector<std::string> joint_names_kpos_ = {
     // URDF에 정의된 순서대로 6+7+7+2 = 22개 이름을 넣으세요.
     "l_rail_joint","l_joint1","l_joint2","l_joint3","l_joint4","l_joint5","l_joint6",
-    "r_joint1","r_joint2","r_joint3","r_joint4","r_joint5","r_joint6",
-    "joint0",    "joint1","joint2","joint3","joint4","joint5","joint6","gripper_r_prismatic",
+    "r_joint1","r_joint2","r_joint3","r_joint4","r_joint5","r_joint6","joint0","joint1", "joint2", "joint3", "joint4", "joint5", "joint6","gripper_r_prismatic",
     "gripper_l_prismatic"
   };
 
@@ -47,10 +46,10 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr sub_sim_tau_;
   rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr sub_CRS_F0_, sub_TGT_F0_, sub_CRS_RW_tau_, sub_TGT_RW_tau_;
 
-  std::vector<std::string> joint_names_ = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
+  std::vector<std::string> joint_names_ = {"joint0","joint1", "joint2", "joint3", "joint4", "joint5", "joint6"};
 public:
   KPOSNode() : Node("kpos_node") {
-    indy12_q_init_ << 0, -M_PI_2, 0, 0, 0, 0, 0;
+    indy12_q_init_ << 0, -M_PI_2, 0, M_PI_2+M_PI_2/2.0, 0, 0, 0;
     sim_indy12_q_init_ = indy12_q_init_;
     kuka_l_init_ << 0, -M_PI_2, -M_PI_2, M_PI / 1.8, 0, -M_PI / 18, 0;
     kuka_r_init_ << 0, -M_PI_2, M_PI / 1.8, 0, -M_PI / 18, 0;
@@ -59,8 +58,8 @@ public:
     kpos_.initialize(kuka_l_init_, kuka_r_init_, indy12_q_init_, sim_indy12_q_init_);
 
     // Publishers
-    pub_kl_js_ = create_publisher<sensor_msgs::msg::JointState>("/KUKA/Left/joint_states", 10);
-    pub_kr_js_ = create_publisher<sensor_msgs::msg::JointState>("/KUKA/Right/joint_states", 10);
+    // pub_kl_js_ = create_publisher<sensor_msgs::msg::JointState>("/KUKA/Left/joint_states", 10);
+    // pub_kr_js_ = create_publisher<sensor_msgs::msg::JointState>("/KUKA/Right/joint_states", 10);
     pub_kl_tcp_ = create_publisher<geometry_msgs::msg::PoseStamped>("/KUKA/Left/tcp", 10);
     pub_kr_tcp_ = create_publisher<geometry_msgs::msg::PoseStamped>("/KUKA/Right/tcp", 10);
     pub_i12_js_ = create_publisher<sensor_msgs::msg::JointState>("/Indy12/joint_states", 10);
@@ -177,28 +176,33 @@ public:
       if (grip.size() > 1) msg.position.push_back(grip(1));
       pub->publish(msg);
     };
-
-    pub_js(pub_kl_js_, kpos_.q_l, Eigen::VectorXd::Zero(7), Eigen::VectorXd(), joint_names_);
-    pub_js(pub_kr_js_, kpos_.q_r, Eigen::VectorXd::Zero(6), Eigen::VectorXd(), joint_names_);
-    pub_js(pub_i12_js_, kpos_.indy12_q, kpos_.indy12_qdot, kpos_.gripper_q, joint_names_);
+    Eigen::VectorXd grip_null;
+    // pub_js(pub_kl_js_, kpos_.q_l, Eigen::VectorXd::Zero(7), Eigen::VectorXd(), joint_names_);
+    // pub_js(pub_kr_js_, kpos_.q_r, Eigen::VectorXd::Zero(6), Eigen::VectorXd(), joint_names_);
+    pub_js(pub_i12_js_, kpos_.indy12_q, kpos_.indy12_qdot, grip_null, joint_names_);
     pub_js(pub_sim_js_, kpos_.sim_indy12_q, kpos_.sim_indy12_qdot, kpos_.sim_gripper_q, joint_names_);
     // 1) 전체 20축 포지션 + 20축 벨로시티(0으로 채움)
-    Eigen::VectorXd q_all(20), qd_all = Eigen::VectorXd::Zero(20);
+    Eigen::VectorXd q_all(22), qd_all = Eigen::VectorXd::Zero(22);
         //   KUKA Left (7)
         for(int i = 0; i < 7; ++i)    q_all( i)   = kpos_.q_l(i);
+        for(int i = 0; i < 6; ++i)    q_all(7+i)       = kpos_.q_r(i);
+
+        for(int i = 0; i < 7; ++i)    q_all(13 + i)  = kpos_.sim_indy12_q(i);
+        // for(int i = 0; i < 7; ++i)    q_all(13 + i)  = kpos_.indy12_q(i);
+        for(int i = 0; i < 2; ++i)    q_all(20+i)       = kpos_.gripper_q(i);
+
     //   SIM/CRS (6)
-    for(int i = 0; i < 6; ++i)    q_all(7+i)       = kpos_.q_r(i);
 
     //   Indy12 (7)
-    for(int i = 0; i < 7; ++i)    q_all(13 + i)  = kpos_.indy12_q(i);
+    // 
 
     // 2) 그리퍼 2축
     Eigen::VectorXd grip(2);
-    grip << kpos_.sim_gripper_q(0),
-            kpos_.sim_gripper_q(1);
-
+    grip << kpos_.gripper_q(0),
+            kpos_.gripper_q(1);
+       
     // 3) KPOS/joint_states 토픽으로 발행
-    pub_js(pub_kpos_js_, q_all, qd_all, grip, joint_names_kpos_);
+    pub_js(pub_kpos_js_, q_all, qd_all, grip_null, joint_names_kpos_);
 
     auto pub_sat = [&](const Eigen::VectorXd& sat, auto pub) {
       geometry_msgs::msg::PoseStamped msg;
