@@ -185,9 +185,9 @@ public:
     // 1) 전체 20축 포지션 + 20축 벨로시티(0으로 채움)
     Eigen::VectorXd q_all(20), qd_all = Eigen::VectorXd::Zero(20);
         //   KUKA Left (7)
-        for(int i = 0; i < 7; ++i)    q_all(6 + i)   = kpos_.q_l(i);
+        for(int i = 0; i < 7; ++i)    q_all( i)   = kpos_.q_l(i);
     //   SIM/CRS (6)
-    for(int i = 0; i < 6; ++i)    q_all(i)       = kpos_.q_r(i);
+    for(int i = 0; i < 6; ++i)    q_all(7+i)       = kpos_.q_r(i);
 
     //   Indy12 (7)
     for(int i = 0; i < 7; ++i)    q_all(13 + i)  = kpos_.indy12_q(i);
